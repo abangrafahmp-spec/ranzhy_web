@@ -6,19 +6,12 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
-// ================= KONFIGURASI FIREBASE MILIK LU =================
+// ================= KONFIGURASI FIREBASE DARI VERCEL ENVIRONMENT VARIABLES =================
 const serviceAccount = {
   "type": "service_account",
-  "project_id": "ranzhy-tools",
-  "private_key_id": "9cb1c1955cf5b62c00df6fe3ace3dfd2b85af66d",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDVRBuJQh82tEWi\naBBcT3a4TIrKCkYomdm4SBERn1cs5Nte9sroP4jR8au5boHEqfqAJrL3vtONg5jh\naE2UMkI9hnwjaZoV+TFhGZ7texHSieAxYn4UoDclGztmlR778B86lbkQ3dspFUAa\nW1mw3mCdUZCYXA690z3QrtC595p8hm7Y5QDPiWHSzfO6x4ZYdpxxOsQhuNdlhrMS\n8HsBwFfqxsu6zWQjy8WErEQSFizspcPRNV/RrK5iYMeEf5FS3oUPKg6Gnz39w/Pq\nJE7b5T+SU1Lxbcqjo7rCBXzbWeWj9DGpCm8XDZaD/l1KvWUG5fyqFmFtStVxdvn6\n1/+oYmrLAgMBAAECggEAN9HbSTpS1C0sGr2VJqwv3T4/h3FX+rGGMHtAaHXlydze\n5ETBSDe09oqEUYUwlwqMg/VdG4ZJdf1PSxRTVeovt03XeSdfSsgOGiWsGOmA+TPY\nR+TJLlnfBSnTCt8WHIg1jE57AYSoI+EphZyKZcZW0GZ0a8SQoTPEtrXC8SHzQAsv\nBoDDADBH6u9GWpyGiAqd7lQnfJ/6EPTDUIoME848jww0yEpLKKA8+2DHzs9jxQCD\nMWR6oQHwelRj01f3al7pbZiMf/W2bc9HwXnc5J1bGAj1iT+Uft9f48XlIw5N9aRf\n3V/MKSfhjbsJ+ezWfF0ALBQ39wT3ggdD8LLgSknMdQKBgQD9rAnaBltJYnSohs1z\nsM1OxQ3JeJBtBq1pdYip1VfiIYXQIs/V0I/DtuJXLN7Qzb6Shj26kUXoKZ67w7Hr\nWxuIaOhjo91vAcothCspoihZLqZ+vmNlSOep+DbxIZF/6LSpCp8k2q5BD0nQEBWS\ns0ieHIsrfFOgaFOEHhXSRzWRbwKBgQDXOSRJbs2cGm2WEFjxawPirN5PRqyrdJLE\nbY+gE1LOq259InoqTDqluHsSP7w4XUBrr0bkWclJzZ69n0WkM6WmMbb93Quh0PYe\nHFfz15YG8LySnrN7YhB1D5hQJkoDP5FD5bGr3qnecx835rua0i2xKAv9ZdwD3lE5\nu9qKfQeWZQKBgHsBiElrmaptDoqFy2xVCEkw7m2Kg+YKPd6Merd310S04rE5oDRb\nDMtnjDufa3AuxEFCzP4B4bchL3J3A3hP1nr/++gNFpv0bzhBBbkLg6szHtMIuSPt\nBUD7NpEYqPgwPCJYHzF8xNCRfEZi9kMLoqPgzW9JuzdmP1EqUYSEuSoLAoGAPYCu\nxe1MBFfpCQES6apTKeuMe8sOfNCLQGaurGfZOgXzRP8dOgkemUzmnohoGRNM3Xjx\nIUAnLVf9DOL+27WGmL+MM29/a3ZzXpdq6tuom8MfoCaJ07BqU4lpVT4b2GHJ+UUi\nSKMQl+j9+tOMuOlm9UEka/03qkNVotHz2a9xA6ECgYAJsYX8PoXVlqz3XgEb/9BT\nGmKFMsZ+tpbmJXE1M2v2kuwBVLUjfQP0pKE6IXPuizO/oX9yrxiRW66GDSwSeBam\nrAZnpCSdIImssQr1y3tfqJRhL1W751EkR9hZZx/gc/J33wMC/EnlxRhMcE2RDZW5\nOF6qH2gdbhm5eaMMFSGhNA==\n-----END PRIVATE KEY-----\n",
-  "client_email": "firebase-adminsdk-fbsvc@ranzhy-tools.iam.gserviceaccount.com",
-  "client_id": "108648518056530441507",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40ranzhy-tools.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
+  "project_id": process.env.FIREBASE_PROJECT_ID,
+  "private_key": process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+  "client_email": process.env.FIREBASE_CLIENT_EMAIL,
 };
 
 if (!admin.apps.length) {
@@ -145,7 +138,6 @@ app.post('/api/edit-tool', async (req, res) => {
   if(toolIndex !== -1) {
     data.tools[toolIndex].name = name;
     data.tools[toolIndex].desc = desc;
-    // Update image & html jika dikirim dari frontend
     if (image !== undefined) data.tools[toolIndex].image = image;
     if (html !== undefined) data.tools[toolIndex].html = html;
     
@@ -235,7 +227,6 @@ app.get('/api/reviews', async (req, res) => {
     const now = Date.now();
     const FIVE_MINUTES = 5 * 60 * 1000;
 
-    // Cek apakah sudah 5 menit sejak bot terakhir komentar
     if (now - reviewsData.lastBotTime > FIVE_MINUTES) {
       
       const botNames = ["Budi Santoso", "Siti Rahma", "Andi Pratama", "Dewi Lestari", "Rizky Ramadhan", "Putri Ayu", "Fajar Nugroho", "Indah Permata", "Bayu Saputra", "Nisa Fauziah"];
@@ -266,7 +257,6 @@ app.get('/api/reviews', async (req, res) => {
       await db.ref('ranzhy_reviews').set(reviewsData);
     }
     
-    // Balikin list komentar (terbaru duluan)
     res.json(reviewsData.list.reverse());
   } catch(e) {
     res.status(500).json({ error: "Gagal memuat review" });
