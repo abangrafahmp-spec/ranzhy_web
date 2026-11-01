@@ -9,7 +9,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAfKOCnTplBrz1MzUXFXfcdRB-xks-48I8",
@@ -36,7 +36,56 @@
       localStorage.setItem('ranzhy_session', JSON.stringify(userData));
       if (typeof showApp === 'function') showApp(userData);
     } catch (error) {
-      alert("Gagal login: " + error.message);
+      showLuxuryAlert("Gagal login: " + error.message);
+    }
+  };
+
+  window.forgotPassword = function() {
+    showLuxuryPrompt("ranzhy.my.id menyatakan", "Masukkan email yang terdaftar untuk reset password:", async (email) => {
+      if (!email) return;
+      try {
+        await sendPasswordResetEmail(auth, email);
+        showLuxuryAlert("✅ Link reset password telah dikirim ke email Anda! Silakan cek kotak masuk/spam.");
+      } catch (error) {
+        showLuxuryAlert("❌ Gagal mengirim email reset: " + error.message);
+      }
+    }, true);
+  };
+
+  window.handleRegister = async function(e) {
+    e.preventDefault();
+    const name = document.getElementById('regName').value.trim();
+    const email = document.getElementById('regEmail').value.trim().toLowerCase();
+    const pass = document.getElementById('regPassword').value;
+    if(!name || !email || !pass) return showLuxuryAlert('Lengkapi semua field!');
+    
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      const user = userCredential.user;
+      
+      localStorage.setItem('ranzhy_session', JSON.stringify({ name: name, email: email }));
+      showApp({ name: name, email: email });
+      
+    } catch (error) {
+      showLuxuryAlert("❌ Gagal daftar: " + error.message);
+    }
+  };
+
+  window.handleLogin = async function(e) {
+    e.preventDefault();
+    const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+    const pass = document.getElementById('loginPassword').value;
+    
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+      const user = userCredential.user;
+      const displayName = user.displayName || email.split('@')[0];
+      
+      localStorage.setItem('ranzhy_session', JSON.stringify({ name: displayName, email: email }));
+      showApp({ name: displayName, email: email });
+      
+    } catch (error) {
+      showLuxuryAlert('❌ Email atau password salah!');
     }
   };
 </script>
@@ -64,7 +113,6 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: var(--bg)
 @keyframes float { 100% { transform: translate(100px, 100px); } }
 
 .verified-badge { width: 18px; height: 18px; display: inline-block; vertical-align: middle; margin-left: 5px; filter: drop-shadow(0 0 3px rgba(0, 149, 246, 0.6)); }
-
 .role-badge { font-size: 0.6rem; background: var(--primary); color: #000; padding: 2px 5px; border-radius: 4px; margin-left: 5px; font-weight: 800; vertical-align: middle; letter-spacing: 0.5px; }
 
 #authScreen { position: fixed; inset: 0; z-index: 10000; background: rgba(5, 5, 8, 0.95); backdrop-filter: blur(20px); display: flex; align-items: center; justify-content: center; padding: 20px; flex-direction: column; }
@@ -89,6 +137,8 @@ select option { background: #000; color: white; }
 .google-btn { width: 100%; padding: 12px; background: white; color: #333; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: 0.3s; }
 .google-btn:hover { background: #f1f1f1; transform: translateY(-2px); }
 .google-icon { width: 20px; height: 20px; }
+.forgot-password { display: block; text-align: right; font-size: 0.8rem; color: var(--primary); cursor: pointer; margin-top: 10px; text-decoration: none; }
+.forgot-password:hover { text-decoration: underline; }
 
 #mainApp { display: none; width: 100%; min-height: 100vh; }
 .sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; top: 0; left: 0; background: var(--sidebar-bg); backdrop-filter: blur(25px); border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; z-index: 1000; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); overflow-y: auto; }
@@ -114,6 +164,20 @@ select option { background: #000; color: white; }
 .modal-content .close-btn { background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; }
 .modal-content input, .modal-content textarea, .modal-content select { margin-bottom: 10px; padding: 10px; font-size: 0.9rem; }
 .admin-note { font-size: 0.7rem; color: var(--muted); margin-bottom: 10px; display: block; margin-top: -5px;}
+
+/* --- STYLE LUXURY MODAL (ALERT & PROMPT & ADMIN KEY) --- */
+.luxury-modal { background: #0A0A0A; border: 2px solid #D4AF37; border-radius: 16px; box-shadow: 0 0 30px rgba(212, 175, 55, 0.3); padding: 30px 25px; width: 100%; max-width: 380px; text-align: center; position: relative; }
+.luxury-title { color: #D4AF37; font-family: 'Space Grotesk', sans-serif; font-size: 1.2rem; margin-bottom: 5px; font-weight: 700; text-shadow: 0 0 15px rgba(212, 175, 55, 0.6); }
+.luxury-sub { color: #e0e0e0; font-size: 0.9rem; margin-bottom: 25px; line-height: 1.4; }
+.luxury-input { background: #1A1A1A; border: 1px solid #D4AF37; color: #D4AF37; padding: 15px; border-radius: 8px; width: 100%; margin-bottom: 25px; font-family: sans-serif; text-align: center; font-size: 1rem; }
+.luxury-input::placeholder { color: #555; }
+.luxury-input:focus { outline: none; border-color: #FCE68A; box-shadow: 0 0 15px rgba(212, 175, 55, 0.4); }
+.luxury-btn-group { display: flex; gap: 15px; justify-content: center; }
+.btn-gold { background: linear-gradient(135deg, #D4AF37, #B8860B); color: #000; border: none; padding: 12px 20px; border-radius: 8px; font-weight: 800; cursor: pointer; flex: 1; transition: 0.3s; box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3); }
+.btn-gold:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(212, 175, 55, 0.5); }
+.btn-outline-gold { background: transparent; color: #D4AF37; border: 1px solid #D4AF37; padding: 12px 20px; border-radius: 8px; font-weight: 800; cursor: pointer; flex: 1; transition: 0.3s; }
+.btn-outline-gold:hover { background: rgba(212, 175, 55, 0.1); }
+/* ------------------------------------- */
 
 .color-palette { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
 .color-btn { width: 25px; height: 25px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: 0.2s; }
@@ -180,6 +244,12 @@ select option { background: #000; color: white; }
 .review-card { background: rgba(255,255,255,0.03); border-left: 4px solid var(--primary); padding: 20px; border-radius: 0 10px 10px 0; margin-bottom: 15px; }
 .review-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
 .review-stars { color: var(--primary); font-size: 0.9rem; }
+.admin-review-btns { display: flex; gap: 10px; margin-top: 10px; }
+.btn-like { background: rgba(255, 255, 255, 0.1); border: 1px solid var(--border); color: white; padding: 5px 12px; border-radius: 20px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 5px; font-size: 0.8rem; }
+.btn-like:hover { background: rgba(255, 77, 141, 0.2); border-color: #ff4d8d; color: #ff4d8d; }
+.btn-like.active { color: #ff4d8d; border-color: #ff4d8d; background: rgba(255, 77, 141, 0.1); }
+.btn-delete-review { background: rgba(255, 0, 0, 0.1); border: 1px solid red; color: red; padding: 5px 12px; border-radius: 20px; cursor: pointer; transition: 0.2s; font-size: 0.8rem; }
+.btn-delete-review:hover { background: red; color: white; }
 
 .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; margin-top: 30px; }
 .tool-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; cursor: pointer; }
@@ -236,6 +306,7 @@ select option { background: #000; color: white; }
     <form class="auth-form active" id="formLogin" onsubmit="handleLogin(event)">
       <div class="input-group"><label>Email</label><input type="email" id="loginEmail" required placeholder="Masukkan email..."></div>
       <div class="input-group"><label>Password</label><input type="password" id="loginPassword" required placeholder="Masukkan password..."></div>
+      <a href="javascript:void(0)" class="forgot-password" onclick="forgotPassword()">Lupa Password?</a>
       <button type="submit" class="auth-btn">Masuk</button>
     </form>
     <form class="auth-form" id="formRegister" onsubmit="handleRegister(event)">
@@ -341,6 +412,42 @@ select option { background: #000; color: white; }
     <button class="auth-btn" onclick="uploadNewTool()">Upload File</button>
   </div>
 </div>
+
+<!-- ================= MODAL LUXURY (ALERT, PROMPT, ADMIN KEY) ================= -->
+<div id="customAlertModal" class="modal-overlay">
+  <div class="luxury-modal">
+    <div class="luxury-title">ranzhy.my.id menyatakan</div>
+    <div class="luxury-sub" id="alertMessage">Pesan...</div>
+    <div class="luxury-btn-group">
+      <button class="btn-gold" style="width: 100%;" onclick="closeCustomAlert()">Oke</button>
+    </div>
+  </div>
+</div>
+
+<div id="customPromptModal" class="modal-overlay">
+  <div class="luxury-modal">
+    <div class="luxury-title" id="promptTitle">ranzhy.my.id menyatakan</div>
+    <div class="luxury-sub" id="promptMessage">Masukkan data</div>
+    <input type="text" id="promptInput" class="luxury-input" placeholder="..." onkeypress="handlePromptEnter(event)">
+    <div class="luxury-btn-group">
+      <button class="btn-outline-gold" onclick="closeCustomPrompt()">Batal</button>
+      <button class="btn-gold" onclick="submitCustomPrompt()">Oke</button>
+    </div>
+  </div>
+</div>
+
+<div id="adminKeyModal" class="modal-overlay">
+  <div class="luxury-modal">
+    <div class="luxury-title">ranzhy.my.id menyatakan</div>
+    <div class="luxury-sub">Masukkan Admin Key yang valid</div>
+    <input type="password" id="adminKeyInput" class="luxury-input" placeholder="••••••••••••" onkeypress="handleAdminKeyEnter(event)">
+    <div class="luxury-btn-group">
+      <button class="btn-outline-gold" onclick="closeAdminKeyModal()">Batal</button>
+      <button class="btn-gold" onclick="submitAdminKey()">Oke</button>
+    </div>
+  </div>
+</div>
+<!-- ========================================================================= -->
 
 <div id="mainApp">
   <aside class="sidebar" id="sidebar">
@@ -448,6 +555,20 @@ select option { background: #000; color: white; }
           <button class="auth-btn" onclick="clearMessages()" style="background:#333; margin-top:20px; width:auto; color: white;">Hapus Semua Pesan</button>
         </div>
       </div>
+
+      <div class="glass-card" style="margin-top: 20px;">
+        <h3 style="margin-bottom: 20px; color: #fff;">Filter Kata Kasar (Global Chat)</h3>
+        <p class="section-sub" style="margin-bottom: 15px; font-size: 0.9rem;">Kata-kata ini akan otomatis disensor menjadi *** di chat global.</p>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+          <input type="text" id="newBannedWord" placeholder="Tambah kata kasar baru..." style="flex: 1;">
+          <button class="auth-btn" onclick="addBannedWord()" style="width: auto; margin: 0; padding: 0 20px;">Tambah</button>
+        </div>
+
+        <div id="bannedWordsList" style="display: flex; flex-wrap: wrap; gap: 10px;">
+          <!-- Diisi oleh JS -->
+        </div>
+      </div>
     </section>
   </main>
 
@@ -468,7 +589,10 @@ select option { background: #000; color: white; }
           <span>Global Chat</span>
           <div id="chatCountdown" style="font-size: 0.65rem; color: var(--primary); font-weight: normal; margin-top: 2px;"></div>
         </div>
-        <i class="fas fa-times" style="cursor:pointer;" onclick="toggleChat()"></i>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <i id="clearChatBtn" class="fas fa-trash" style="cursor:pointer; color: red; display: none;" onclick="clearGlobalChat()" title="Hapus Semua Chat (Admin)"></i>
+            <i class="fas fa-times" style="cursor:pointer;" onclick="toggleChat()"></i>
+        </div>
       </div>
       <div class="chat-messages" id="chatMessages"><div class="msg system">Menghubungkan...</div></div>
       <div class="chat-input-area">
@@ -509,6 +633,46 @@ let appData = { tools: [] };
 let userDataMap = {}; 
 let chatTimerInterval = null;
 let chatRefreshInterval = null;
+let mutedUsersList = [];
+
+// ================= SISTEM CUSTOM MODAL =================
+let promptCallback = null;
+
+function showLuxuryAlert(msg) {
+  document.getElementById('alertMessage').innerText = msg;
+  document.getElementById('customAlertModal').classList.add('active');
+}
+
+function closeCustomAlert() {
+  document.getElementById('customAlertModal').classList.remove('active');
+}
+
+function showLuxuryPrompt(title, msg, callback, isPassword = false) {
+  document.getElementById('promptTitle').innerText = title;
+  document.getElementById('promptMessage').innerText = msg;
+  const input = document.getElementById('promptInput');
+  input.value = '';
+  input.type = isPassword ? 'password' : 'text';
+  promptCallback = callback;
+  document.getElementById('customPromptModal').classList.add('active');
+  setTimeout(() => input.focus(), 100);
+}
+
+function closeCustomPrompt() {
+  document.getElementById('customPromptModal').classList.remove('active');
+  promptCallback = null;
+}
+
+function submitCustomPrompt() {
+  const val = document.getElementById('promptInput').value;
+  if (promptCallback) promptCallback(val);
+  closeCustomPrompt();
+}
+
+function handlePromptEnter(e) {
+  if (e.key === 'Enter') submitCustomPrompt();
+}
+// =======================================================
 
 window.onload = async function() {
   try {
@@ -533,38 +697,6 @@ function switchAuthTab(tab) {
   } else {
     document.getElementById('tabRegister').classList.add('active');
     document.getElementById('formRegister').classList.add('active');
-  }
-}
-
-function handleRegister(e) {
-  e.preventDefault();
-  const name = document.getElementById('regName').value.trim();
-  const email = document.getElementById('regEmail').value.trim().toLowerCase();
-  const pass = document.getElementById('regPassword').value;
-  if(!name || !email || !pass) return alert('Lengkapi semua field!');
-  
-  let users = JSON.parse(localStorage.getItem(USERS_KEY) || '{}');
-  if (users[email]) return alert('Email sudah terdaftar! Pindah ke tab Login.');
-  
-  users[email] = { name: escapeHTML(name), password: pass };
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-  alert('Daftar berhasil! Sekarang login.');
-  switchAuthTab('login');
-  document.getElementById('loginEmail').value = email;
-}
-
-function handleLogin(e) {
-  e.preventDefault();
-  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
-  const pass = document.getElementById('loginPassword').value;
-  let users = JSON.parse(localStorage.getItem(USERS_KEY) || '{}');
-  
-  if (users[email] && users[email].password === pass) {
-    const user = { name: users[email].name, email: email };
-    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    showApp(user);
-  } else {
-    alert('Email atau password salah! Jika belum daftar, klik tab Daftar dulu.');
   }
 }
 
@@ -603,6 +735,7 @@ async function showApp(user) {
 
   if (currentUserIsAdmin) {
     document.getElementById('adminWidget').classList.add('show');
+    document.getElementById('clearChatBtn').style.display = 'block';
   }
   
   loadReviews();
@@ -610,8 +743,9 @@ async function showApp(user) {
   initTypewriter();
 }
 
+// FITUR TEXT STROKE (TEPI HURUF TAJAM TANPA BAYANGAN TEBAL)
 function formatName(name, color, role, isVerified) {
-    let colorStyle = color ? `style="color: ${color}; text-shadow: 0 0 5px ${color}80;"` : '';
+    let colorStyle = color ? `style="color: ${color}; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000;"` : '';
     let roleBadge = role ? `<span class="role-badge" style="background:${color || 'var(--primary)'}; color:#000;">${role}</span>` : '';
     let badge = isVerified ? verifiedBadgeSVG : '';
     return `<span ${colorStyle}>${escapeHTML(name)}</span> ${roleBadge} ${badge}`;
@@ -677,8 +811,8 @@ async function saveNewName() {
   const newColor = document.getElementById('editColorInput').value;
   const newRole = document.getElementById('editRoleInput').value;
   
-  if (!newName) return alert("Nama tidak boleh kosong!");
-  if (newName === currentLoggedInUser && newColor === currentUserNameColor && newRole === currentUserRole) return alert("Tidak ada perubahan.");
+  if (!newName) return showLuxuryAlert("Nama tidak boleh kosong!");
+  if (newName === currentLoggedInUser && newColor === currentUserNameColor && newRole === currentUserRole) return showLuxuryAlert("Tidak ada perubahan.");
 
   try {
     const res = await fetch('/api/update-profile', {
@@ -701,11 +835,11 @@ async function saveNewName() {
       updateUIProfile();
       await loadVerifiedUsersList();
       document.getElementById('editNameModal').classList.remove('active');
-      alert("✅ Profil berhasil diupdate!");
+      showLuxuryAlert("✅ Profil berhasil diupdate!");
     } else {
-      alert("❌ Gagal: " + result.error);
+      showLuxuryAlert("❌ Gagal: " + result.error);
     }
-  } catch(e) { alert("❌ Gagal koneksi ke server."); }
+  } catch(e) { showLuxuryAlert("❌ Gagal koneksi ke server."); }
 }
 
 function renderToolsGrid() {
@@ -766,9 +900,9 @@ async function togglePin(id) {
       localStorage.setItem('ranzhy_app_data', JSON.stringify(appData));
       renderToolsGrid();
     } else {
-      alert("❌ Gagal pin tool: " + result.error);
+      showLuxuryAlert("❌ Gagal pin tool: " + result.error);
     }
-  } catch(e) { alert("Gagal menghubungi server."); }
+  } catch(e) { showLuxuryAlert("Gagal menghubungi server."); }
 }
 
 function insertColorTo(targetId, colorHex) {
@@ -791,8 +925,8 @@ function openEditToolModal(id) {
     document.getElementById('editToolId').value = tool.id;
     document.getElementById('editToolName').value = tool.name;
     document.getElementById('editToolDesc').value = tool.desc || '';
-    document.getElementById('editToolImage').value = ''; // Reset input file
-    document.getElementById('editToolFile').value = ''; // Reset input file
+    document.getElementById('editToolImage').value = ''; 
+    document.getElementById('editToolFile').value = ''; 
     document.getElementById('editToolModal').classList.add('active');
 }
 
@@ -803,15 +937,13 @@ async function saveEditedTool() {
     const imageFile = document.getElementById('editToolImage').files[0];
     const htmlFile = document.getElementById('editToolFile').files[0];
     
-    if (!name) return alert("Nama tidak boleh kosong!");
+    if (!name) return showLuxuryAlert("Nama tidak boleh kosong!");
     
     const tool = appData.tools.find(t => t.id === id);
     if(!tool) return;
 
-    // Siapkan data yang mau dikirim
     let payload = { id, name, desc };
 
-    // Proses foto baru jika ada
     if (imageFile) {
         const image = await new Promise((resolve) => {
             const reader = new FileReader();
@@ -835,7 +967,6 @@ async function saveEditedTool() {
         payload.image = image;
     }
 
-    // Proses HTML baru jika ada
     if (htmlFile) {
         const htmlContent = await new Promise((resolve) => {
             const reader = new FileReader();
@@ -857,11 +988,11 @@ async function saveEditedTool() {
             localStorage.setItem('ranzhy_app_data', JSON.stringify(appData));
             renderToolsGrid();
             document.getElementById('editToolModal').classList.remove('active');
-            alert("✅ Tool berhasil diupdate!");
+            showLuxuryAlert("✅ Tool berhasil diupdate!");
         } else {
-            alert("❌ Gagal: " + result.error);
+            showLuxuryAlert("❌ Gagal: " + result.error);
         }
-    } catch(e) { alert("Gagal koneksi ke server."); }
+    } catch(e) { showLuxuryAlert("Gagal koneksi ke server."); }
 }
 
 async function uploadNewTool() {
@@ -870,7 +1001,7 @@ async function uploadNewTool() {
   const imageFile = document.getElementById('newToolImage').files[0];
   const file = document.getElementById('newToolFile').files[0];
   
-  if(!name || !file) return alert("Isi nama dan upload file HTML!");
+  if(!name || !file) return showLuxuryAlert("Isi nama dan upload file HTML!");
   
   const processHTML = new Promise((resolve) => {
     const reader = new FileReader();
@@ -926,13 +1057,13 @@ async function uploadNewTool() {
       document.getElementById('newToolFile').value = '';
       
       renderToolsGrid(); 
-      alert("✅ File berhasil di-upload ke TOOLS!");
+      showLuxuryAlert("✅ File berhasil di-upload ke TOOLS!");
       toggleAdminPanel();
     } else {
-      alert("❌ Gagal dari Server: " + result.error);
+      showLuxuryAlert("❌ Gagal dari Server: " + result.error);
     }
 
-  } catch(err) { alert("❌ Gagal upload. Cek koneksi internet lu bro."); }
+  } catch(err) { showLuxuryAlert("❌ Gagal upload. Cek koneksi internet lu bro."); }
 }
 
 async function deleteTool(id) {
@@ -946,7 +1077,7 @@ async function deleteTool(id) {
 function openCustomTool(html, title) {
   document.getElementById('iframeTitle').textContent = title;
   document.getElementById('toolIframe').srcdoc = html;
-  document.getElementById('toolIframeModal').classList.add('active');
+    document.getElementById('toolIframeModal').classList.add('active');
 }
 function closeIframeModal() {
   document.getElementById('toolIframeModal').classList.remove('active');
@@ -990,6 +1121,8 @@ async function loadAdminDashboard() {
     }
     userContainer.innerHTML = html || '<p>Belum ada user terdaftar di database.</p>';
   } catch(e) { userContainer.innerHTML = '<p style="color:red;">Gagal memuat users.</p>'; }
+
+  loadBannedWords();
 }
 
 async function toggleUserVerify(targetEmail) {
@@ -1005,9 +1138,66 @@ async function toggleUserVerify(targetEmail) {
       loadAdminDashboard(); 
       loadVerifiedUsersList(); 
     } else {
-      alert(result.error);
+      showLuxuryAlert(result.error);
     }
-  } catch(e) { alert("Gagal menghubungi server."); }
+  } catch(e) { showLuxuryAlert("Gagal menghubungi server."); }
+}
+
+async function loadBannedWords() {
+  const container = document.getElementById('bannedWordsList');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/banned-words');
+    const words = await res.json();
+    if (words.length === 0) {
+      container.innerHTML = '<p style="color:var(--muted); font-size: 0.85rem;">Belum ada kata kasar yang difilter.</p>';
+      return;
+    }
+    container.innerHTML = words.map(w => `
+      <div style="background: rgba(255,0,0,0.2); border: 1px solid red; padding: 5px 10px; border-radius: 10px; display: flex; align-items: center; gap: 10px;">
+        <span style="color: #ff4d4d; font-weight: bold;">${escapeHTML(w)}</span>
+        <i class="fas fa-times" style="cursor: pointer; color: #ff4d4d;" onclick="removeBannedWord('${w}')"></i>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<p style="color:red;">Gagal memuat filter.</p>';
+  }
+}
+
+async function addBannedWord() {
+  const input = document.getElementById('newBannedWord');
+  const word = input.value.trim().toLowerCase();
+  if (!word) return;
+  try {
+    const res = await fetch('/api/banned-words', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminEmail: currentUserEmail, word: word })
+    });
+    const result = await res.json();
+    if (result.success) {
+      input.value = '';
+      loadBannedWords();
+    } else {
+      showLuxuryAlert("Gagal: " + result.error);
+    }
+  } catch (e) { showLuxuryAlert("Gagal menambah kata kasar."); }
+}
+
+async function removeBannedWord(word) {
+  try {
+    const res = await fetch('/api/banned-words/' + word, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminEmail: currentUserEmail })
+    });
+    const result = await res.json();
+    if (result.success) {
+      loadBannedWords();
+    } else {
+      showLuxuryAlert("Gagal: " + result.error);
+    }
+  } catch (e) { showLuxuryAlert("Gagal menghapus kata kasar."); }
 }
 
 function showPage(pageId, el) {
@@ -1053,7 +1243,7 @@ function toggleMusic() {
   } else {
     bgMusic.play().then(() => {
       musicBtn.classList.add('playing'); musicBtn.innerHTML = '<i class="fas fa-pause"></i>'; isPlaying = true;
-    }).catch(e => alert('Gagal memutar musik. Pastikan capuciho.mp3 ada.'));
+    }).catch(e => showLuxuryAlert('Gagal memutar musik. Pastikan capuciho.mp3 ada.'));
   }
 }
 
@@ -1088,9 +1278,9 @@ function setRating(val) {
 }
 
 async function submitReview() {
-  if (selectedRating === 0) return alert("Pilih rating bintang dulu bro!");
+  if (selectedRating === 0) return showLuxuryAlert("Pilih rating bintang dulu bro!");
   const comment = document.getElementById('reviewComment').value.trim();
-  if (!comment) return alert("Tulis komentar dulu bro!");
+  if (!comment) return showLuxuryAlert("Tulis komentar dulu bro!");
 
   try {
     const res = await fetch('/api/reviews', {
@@ -1098,10 +1288,10 @@ async function submitReview() {
       body: JSON.stringify({ name: currentLoggedInUser, rating: selectedRating, comment: escapeHTML(comment) })
     });
     if ((await res.json()).success) {
-      alert("✅ Rating & Komentar berhasil dikirim!");
+      showLuxuryAlert("✅ Rating & Komentar berhasil dikirim!");
       document.getElementById('reviewComment').value = ""; setRating(0); loadReviews();
     }
-  } catch (error) { alert("Gagal mengirim review."); }
+  } catch (error) { showLuxuryAlert("Gagal mengirim review."); }
 }
 
 async function loadReviews() {
@@ -1117,6 +1307,17 @@ async function loadReviews() {
       const isVerified = u.isVerified || false;
       const formattedName = formatName(r.name, u.color, u.role, isVerified);
       
+      let adminButtons = currentUserIsAdmin ? `
+        <div class="admin-review-btns">
+          <button class="btn-like ${r.likes > 0 ? 'active' : ''}" onclick="likeReview('${r.id}')">
+            <i class="fas fa-heart"></i> ${r.likes || 0}
+          </button>
+          <button class="btn-delete-review" onclick="deleteReview('${r.id}')">
+            <i class="fas fa-trash"></i> Hapus
+          </button>
+        </div>
+      ` : (r.likes > 0 ? `<div class="admin-review-btns"><span class="btn-like active" style="cursor: default;"><i class="fas fa-heart"></i> ${r.likes}</span></div>` : '');
+
       return `
       <div class="review-card">
         <div class="review-header">
@@ -1125,9 +1326,29 @@ async function loadReviews() {
         </div>
         <div class="review-comment">${r.comment}</div>
         <div style="font-size:0.75rem; color:var(--muted); margin-top:10px;">${r.date}</div>
+        ${adminButtons}
       </div>
     `}).join('');
   } catch (error) { list.innerHTML = '<p style="color:red;">Gagal memuat komentar.</p>'; }
+}
+
+async function likeReview(id) {
+  try {
+    const res = await fetch('/api/reviews/' + id + '/like', { method: 'POST' });
+    if ((await res.json()).success) loadReviews();
+  } catch(e) { showLuxuryAlert("Gagal like review."); }
+}
+
+async function deleteReview(id) {
+  if(!confirm("Yakin mau hapus komentar ini?")) return;
+  try {
+    const res = await fetch('/api/reviews/delete/' + id, { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adminEmail: currentUserEmail })
+    });
+    if ((await res.json()).success) loadReviews();
+  } catch(e) { showLuxuryAlert("Gagal menghapus review."); }
 }
 
 async function loadPrivateChat() {
@@ -1172,7 +1393,7 @@ async function sendPrivateMessage() {
       body: JSON.stringify({ sender: currentLoggedInUser, receiver: receiver, text: escapeHTML(val) })
     });
     loadPrivateChat();
-  } catch (error) { alert("Gagal kirim pesan."); }
+  } catch (error) { showLuxuryAlert("Gagal kirim pesan."); }
 }
 function handlePrivateChatEnter(e) { if(e.key === 'Enter') sendPrivateMessage(); }
 
@@ -1189,14 +1410,27 @@ document.getElementById('contactForm').addEventListener('submit', async (e) => {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: escapeHTML(document.getElementById('cName').value), email: document.getElementById('cEmail').value, msg: escapeHTML(document.getElementById('cMessage').value) })
     });
-    if((await res.json()).success) { alert('✅ Pesan berhasil dikirim!'); e.target.reset(); }
-  } catch (error) { alert('❌ Error server.'); }
+    if((await res.json()).success) { showLuxuryAlert('✅ Pesan berhasil dikirim!'); e.target.reset(); }
+  } catch (error) { showLuxuryAlert('❌ Error server.'); }
   btn.innerHTML = '<i class="fas fa-paper-plane"></i> Kirim Pesan'; btn.disabled = false;
 });
 
-async function loginAdmin() {
-  const input = prompt("Masukkan Admin Key:");
-  if(!input) return;
+function loginAdmin() {
+  document.getElementById('adminKeyInput').value = '';
+  document.getElementById('adminKeyModal').classList.add('active');
+}
+
+function closeAdminKeyModal() {
+  document.getElementById('adminKeyModal').classList.remove('active');
+}
+
+function handleAdminKeyEnter(e) {
+  if(e.key === 'Enter') submitAdminKey();
+}
+
+async function submitAdminKey() {
+  const input = document.getElementById('adminKeyInput').value;
+  if(!input) return showLuxuryAlert("Admin Key tidak boleh kosong!");
   
   try {
     const res = await fetch('/api/verify-admin', {
@@ -1207,12 +1441,14 @@ async function loginAdmin() {
     
     const data = await res.json();
     if(data.success) {
+      closeAdminKeyModal();
       showPage('admin', null);
     } else {
-      alert("Admin Key Salah!");
+      showLuxuryAlert("❌ Admin Key Salah!");
     }
-  } catch(e) { alert("Gagal terhubung ke server."); }
+  } catch(e) { showLuxuryAlert("❌ Gagal terhubung ke server."); }
 }
+
 async function clearMessages() {
   if(confirm("Hapus semua pesan?")) { await fetch('/api/messages', { method: 'DELETE' }); loadAdminDashboard(); }
 }
@@ -1235,6 +1471,7 @@ async function loadChat() {
     const res = await fetch('/api/chat');
     const data = await res.json();
     const msgs = data.messages || [];
+    mutedUsersList = data.mutedUsers || [];
     
     startChatTimer(data.lastReset);
 
@@ -1251,7 +1488,13 @@ async function loadChat() {
       const isVerified = u.isVerified || false;
       const formattedName = formatName(m.sender, u.color, u.role, isVerified);
       
-      div.innerHTML = `<span class="msg-name">${formattedName} • ${m.time}</span>${escapeHTML(m.text)}`;
+      let muteBtn = '';
+      if (currentUserIsAdmin && m.sender !== currentLoggedInUser) {
+         const isMuted = mutedUsersList.includes(m.sender);
+         muteBtn = `<i class="fas ${isMuted ? 'fa-volume-up' : 'fa-volume-mute'}" style="cursor: pointer; margin-left: 5px; color: ${isMuted ? '#4CAF50' : '#ff4d4d'};" onclick="toggleMute('${m.sender}', ${isMuted})" title="${isMuted ? 'Unmute User' : 'Mute User'}"></i>`;
+      }
+
+      div.innerHTML = `<span class="msg-name">${formattedName} ${muteBtn} • ${m.time}</span>${escapeHTML(m.text)}`;
       container.appendChild(div);
     });
     container.scrollTop = container.scrollHeight;
@@ -1288,13 +1531,48 @@ async function sendChat() {
   const input = document.getElementById('chatInput');
   const val = input.value.trim();
   if(!val || !currentLoggedInUser) return;
+  
+  if (mutedUsersList.includes(currentLoggedInUser)) {
+      return showLuxuryAlert("❌ Kamu telah di-mute oleh Admin dan tidak bisa mengirim pesan!");
+  }
+
   input.value = '';
   try {
-    await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sender: currentLoggedInUser, text: escapeHTML(val) }) });
-    loadChat();
+    const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sender: currentLoggedInUser, text: escapeHTML(val) }) });
+    const data = await res.json();
+    if (data.error) {
+        showLuxuryAlert("❌ " + data.error);
+    } else {
+        loadChat();
+    }
   } catch (error) {}
 }
 function handleChatEnter(e) { if(e.key === 'Enter') sendChat(); }
+
+async function toggleMute(targetUser, isMuted) {
+    if (!currentUserIsAdmin) return;
+    try {
+        const res = await fetch('/api/chat/mute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminEmail: currentUserEmail, targetUser, isMuted })
+        });
+        if ((await res.json()).success) loadChat();
+    } catch(e) { showLuxuryAlert("Gagal mute user."); }
+}
+
+async function clearGlobalChat() {
+    if (!currentUserIsAdmin) return;
+    if (!confirm("Yakin mau menghapus SEMUA chat global?")) return;
+    try {
+        const res = await fetch('/api/chat/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminEmail: currentUserEmail })
+        });
+        if ((await res.json()).success) loadChat();
+    } catch(e) { showLuxuryAlert("Gagal hapus chat."); }
+}
 </script>
 </body>
 </html>
