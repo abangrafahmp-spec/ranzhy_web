@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
-// ================= KONFIGURASI FIREBASE DARI VERCEL ENVIRONMENT VARIABLES =================
+// ================= KONFIGURASI FIREBASE =================
 const serviceAccount = {
   "type": "service_account",
   "project_id": process.env.FIREBASE_PROJECT_ID,
@@ -171,36 +171,92 @@ app.delete('/api/delete-tool/:id', async (req, res) => {
 });
 
 // ================= API GLOBAL CHAT (FIREBASE + 24H RESET) =================
+async function getBannedWords() {
+  try {
+    const snapshot = await db.ref('ranzhy_settings/banned_words').once('value');
+    return snapshot.val() || [];
+  } catch(e) { return []; }
+}
+
+app.get('/api/banned-words', async (req, res) => {
+  const words = await getBannedWords();
+  res.json(words);
+});
+
+app.post('/api/banned-words', async (req, res) => {
+  const { adminEmail, word } = req.body;
+  if (!ADMIN_EMAILS.includes(adminEmail)) return res.status(403).json({ error: "Hanya Admin!" });
+  if (!word) return res.status(400).json({ error: "Kata tidak boleh kosong" });
+
+  try {
+    const words = await getBannedWords();
+    if (!words.includes(word)) {
+      words.push(word);
+      await db.ref('ranzhy_settings/banned_words').set(words);
+    }
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: "Gagal simpan kata kasar" }); }
+});
+
+app.delete('/api/banned-words/:word', async (req, res) => {
+  const { adminEmail } = req.body;
+  if (!ADMIN_EMAILS.includes(adminEmail)) return res.status(403).json({ error: "Hanya Admin!" });
+  
+  try {
+    let words = await getBannedWords();
+    words = words.filter(w => w !== req.params.word);
+    await db.ref('ranzhy_settings/banned_words').set(words);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: "Gagal hapus kata kasar" }); }
+});
+
 app.get('/api/chat', async (req, res) => {
   try {
     const snapshot = await db.ref('ranzhy_chat').once('value');
-    let chatData = snapshot.val() || { messages: [], lastReset: Date.now() };
+    let chatData = snapshot.val() || { messages: [], lastReset: Date.now(), mutedUsers: [] };
     
+    // Pastikan mutedUsers selalu ada
+    if (!chatData.mutedUsers) chatData.mutedUsers = [];
+
     const now = Date.now();
     const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
     if (now - chatData.lastReset > TWENTY_FOUR_HOURS) {
-      chatData = { messages: [], lastReset: now };
+      chatData.messages = [];
+      chatData.lastReset = now;
       await db.ref('ranzhy_chat').set(chatData);
     }
     
-    res.json({ messages: chatData.messages || [], lastReset: chatData.lastReset });
+    res.json({ messages: chatData.messages || [], lastReset: chatData.lastReset, mutedUsers: chatData.mutedUsers });
   } catch (e) {
     res.status(500).json({ error: "Gagal memuat chat" });
   }
 });
 
 app.post('/api/chat', async (req, res) => {
-  const { sender, text } = req.body;
+  let { sender, text } = req.body;
   if (!sender || !text) return res.status(400).json({ error: "Data kosong" });
   
   try {
     const snapshot = await db.ref('ranzhy_chat').once('value');
-    let chatData = snapshot.val() || { messages: [], lastReset: Date.now() };
-    
+    let chatData = snapshot.val() || { messages: [], lastReset: Date.now(), mutedUsers: [] };
+    if (!chatData.mutedUsers) chatData.mutedUsers = [];
+
+    // CEK APAKAH USER DI-MUTE
+    if (chatData.mutedUsers.includes(sender)) {
+        return res.status(403).json({ error: "Kamu telah di-mute oleh Admin dan tidak bisa mengirim pesan!" });
+    }
+
+    const bannedWords = await getBannedWords();
+    bannedWords.forEach(word => {
+        const regex = new RegExp(word, 'gi');
+        text = text.replace(regex, '***');
+    });
+
     const now = Date.now();
     if (now - chatData.lastReset > 24 * 60 * 60 * 1000) {
-      chatData = { messages: [], lastReset: now };
+      chatData.messages = [];
+      chatData.lastReset = now;
     }
 
     chatData.messages.push({ 
@@ -218,39 +274,127 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// ================= API RATING & KOMENTAR (FIREBASE + BOT 5 MENIT) =================
+// API MUTE USER
+app.post('/api/chat/mute', async (req, res) => {
+    const { adminEmail, targetUser, isMuted } = req.body;
+    if (!ADMIN_EMAILS.includes(adminEmail)) return res.status(403).json({ error: "Hanya Admin!" });
+    
+    try {
+        const snapshot = await db.ref('ranzhy_chat').once('value');
+        let chatData = snapshot.val() || { messages: [], lastReset: Date.now(), mutedUsers: [] };
+        if (!chatData.mutedUsers) chatData.mutedUsers = [];
+
+        if (isMuted) {
+            // Unmute
+            chatData.mutedUsers = chatData.mutedUsers.filter(u => u !== targetUser);
+        } else {
+            // Mute
+            if (!chatData.mutedUsers.includes(targetUser)) {
+                chatData.mutedUsers.push(targetUser);
+            }
+        }
+        await db.ref('ranzhy_chat').set(chatData);
+        res.json({ success: true });
+    } catch(e) { res.status(500).json({ error: "Gagal mute/unmute" }); }
+});
+
+// API CLEAR CHAT
+app.post('/api/chat/clear', async (req, res) => {
+    const { adminEmail } = req.body;
+    if (!ADMIN_EMAILS.includes(adminEmail)) return res.status(403).json({ error: "Hanya Admin!" });
+    
+    try {
+        const snapshot = await db.ref('ranzhy_chat').once('value');
+        let chatData = snapshot.val() || { lastReset: Date.now(), mutedUsers: [] };
+        chatData.messages = [];
+        chatData.lastReset = Date.now();
+        await db.ref('ranzhy_chat').set(chatData);
+        res.json({ success: true });
+    } catch(e) { res.status(500).json({ error: "Gagal clear chat" }); }
+});
+
+// ================= API RATING & KOMENTAR =================
 app.get('/api/reviews', async (req, res) => {
   try {
     const snapshot = await db.ref('ranzhy_reviews').once('value');
     let reviewsData = snapshot.val() || { list: [], lastBotTime: 0 };
     
-    const now = Date.now();
-    const FIVE_MINUTES = 5 * 60 * 1000;
+    // --- FIX BUG: PASTIKAN SEMUA REVIEW PUNYA ID ---
+    let needsSave = false;
+    if (!reviewsData.list) reviewsData.list = [];
+    reviewsData.list = reviewsData.list.map((r, index) => {
+        if (!r.id) {
+            r.id = 'rev_fix_' + Date.now() + '_' + index;
+            needsSave = true;
+        }
+        if (r.likes === undefined) r.likes = 0;
+        return r;
+    });
+    if (needsSave) await db.ref('ranzhy_reviews').set(reviewsData);
+    // -----------------------------------------------
 
-    if (now - reviewsData.lastBotTime > FIVE_MINUTES) {
+    const now = Date.now();
+    const THREE_MINUTES = 3 * 60 * 1000; // UBAH JADI 3 MENIT
+
+    if (now - (reviewsData.lastBotTime || 0) > THREE_MINUTES) {
       
-      const botNames = ["Budi Santoso", "Siti Rahma", "Andi Pratama", "Dewi Lestari", "Rizky Ramadhan", "Putri Ayu", "Fajar Nugroho", "Indah Permata", "Bayu Saputra", "Nisa Fauziah"];
+      // --- BOT REALISTIS DENGAN NAMA LENGKAP ---
+      const botNames = [
+        "Budi Santoso", "Siti Aminah", "Rizky Pratama", "Dewi Lestari", "Agus Setiawan",
+        "Putri Ayu", "Fajar Nugroho", "Indah Permata", "Bayu Saputra", "Nisa Fauziah",
+        "Hendra Wijaya", "Rina Marlina", "Dedi Kurniawan", "Sri Wahyuni", "Andi Setiawan",
+        "Yuni Astuti", "Eko Prasetyo", "Maya Sari", "Arif Budiman", "Lina Marlina",
+        "Taufik Hidayat", "Fitri Handayani", "Gunawan Saputra", "Ratna Sari", "Syarif Hidayatullah",
+        "Aisyah Putri", "Bambang Pamungkas", "Citra Kirana", "Dimas Anggara", "Eka Gustiwana",
+        "Farhan Maulana", "Gita Savitri", "Iqbal Ramadhan", "Jessica Mila", "Kevin Julio",
+        "Lesti Kejora", "Maudy Ayunda", "Nicholas Saputra", "Olla Ramlan", "Pevita Pearce"
+      ];
+      
       const botComments = [
-        "Webnya keren banget, sangat membantu!", 
-        "Desain modern dan rapi, suka UI-nya.", 
-        "Tools-nya lengkap, mantap bro lanjutkan!", 
-        "Sangat bermanfaat, terima kasih admin.",
-        "Loadingnya cepat dan fiturnya bagus.",
-        "Web terbaik yang pernah saya coba.",
-        "Keren, semoga makin berkembang ke depannya.",
-        "Fitur-fitur barunya sangat berguna."
+        "Webnya keren banget, UI/UX nya enak dilihat. Lanjutkan bang!", 
+        "Wah nemu web ini dari TikTok, ternyata beneran berguna. Makasih min.",
+        "Fitur tool yang kemarin gua pake works bgt, mantap.",
+        "Adminnya fast respon bgt di chat, suka ah.",
+        "Btw ini web nya pake framework apa ya? Ringan banget soalnya.",
+        "Semoga makin rame dan banyak fitur baru nya ya bang.",
+        "Bintang 5 buat pelayanan dan toolsnya yang memuaskan.",
+        "Awalnya iseng buka, ternyata ada tool yang lagi gua cari. Gokil.",
+        "Tolong tambahin fitur dark mode dong min, biar makin mantap.",
+        "Saran aja, mungkin bisa nambah fitur buat convert file juga?",
+        "Webnya bener-bener ngebantu buat kerjaan harian gua.",
+        "Sumpah ini web underrated sih, harusnya lebih rame.",
+        "Keren, tampilannya modern dan ga kaku.",
+        "Amanah banget ini web, gua rekomendasiin ke temen-temen.",
+        "Gila sih ini adminnya, webnya dibikin se-rapi ini.",
+        "Mantul banget pokoknya, ga ada kata lain selain keren.",
+        "Tool downloadernya ngebut bgt, gak pake lemot.",
+        "Udah gua cek semua fiturnya, aman dan gak ada bug.",
+        "Bisa request tool AI buat ngeringkes teks gak min?",
+        "Desainnya elegan, warnanya pas gak bikin mata sakit.",
+        "Ini web wajib sih buat anak kuliahan yang sering dapet tugas.",
+        "Awalnya ragu, pas dicoba ternyata beneran bagus.",
+        "Bintang 4 dulu dari gua, semoga makin sempurna ke depannya.",
+        "Admin ramah, sistemnya gampang dipahami. Top deh!",
+        "Ada bug dikit di halaman tool sebelah min, tolong dicek.",
+        "Gua udah nyoba tool yang lain, tetep ini yang paling enak dipake.",
+        "Terima kasih banyak min, sangat membantu banget ini.",
+        "Keren abis, respon web cepet banget gak nge-lag.",
+        "Sumpah ini pertama kali gua nemu web sebagus ini.",
+        "Fitur-fitur barunya mantul banget min, keep it up!"
       ];
       
       const randomName = botNames[Math.floor(Math.random() * botNames.length)];
       const randomComment = botComments[Math.floor(Math.random() * botComments.length)];
-      const randomRating = Math.random() > 0.5 ? 5 : 4;
+      const randomRating = Math.random() > 0.2 ? 5 : 4; // 80% bintang 5, 20% bintang 4
 
       reviewsData.list.push({
+        id: 'bot_' + Date.now(),
         name: randomName,
         rating: randomRating,
         comment: randomComment,
         date: new Date().toLocaleString('id-ID'),
-        isBot: true
+        isBot: true,
+        likes: Math.floor(Math.random() * 15) + 1 // Kasih like random (1-15) biar kelihatan rame
       });
 
       reviewsData.lastBotTime = now;
@@ -272,11 +416,13 @@ app.post('/api/reviews', async (req, res) => {
     let reviewsData = snapshot.val() || { list: [], lastBotTime: 0 };
     
     reviewsData.list.push({ 
+      id: 'rev_' + Date.now(),
       name, 
       rating, 
       comment, 
       date: new Date().toLocaleString('id-ID'),
-      isBot: false 
+      isBot: false,
+      likes: 0
     });
     
     await db.ref('ranzhy_reviews').set(reviewsData);
@@ -284,6 +430,40 @@ app.post('/api/reviews', async (req, res) => {
   } catch(e) {
     res.status(500).json({ error: "Gagal simpan review" });
   }
+});
+
+// Fitur Admin: Like Review
+app.post('/api/reviews/:id/like', async (req, res) => {
+  try {
+    const snapshot = await db.ref('ranzhy_reviews').once('value');
+    let reviewsData = snapshot.val();
+    if (!reviewsData || !reviewsData.list) return res.status(404).json({error: "Data tidak ditemukan"});
+
+    const index = reviewsData.list.findIndex(r => r.id === req.params.id);
+    if (index !== -1) {
+      reviewsData.list[index].likes = (reviewsData.list[index].likes || 0) + 1;
+      await db.ref('ranzhy_reviews').set(reviewsData);
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: "Review tidak ditemukan" });
+    }
+  } catch(e) { res.status(500).json({ error: "Gagal like review" }); }
+});
+
+// Fitur Admin: Hapus Review (Diubah ke POST biar aman)
+app.post('/api/reviews/delete/:id', async (req, res) => {
+  const { adminEmail } = req.body;
+  if (!ADMIN_EMAILS.includes(adminEmail)) return res.status(403).json({ error: "Hanya Admin yang bisa menghapus!" });
+
+  try {
+    const snapshot = await db.ref('ranzhy_reviews').once('value');
+    let reviewsData = snapshot.val();
+    if (!reviewsData || !reviewsData.list) return res.status(404).json({error: "Data tidak ditemukan"});
+
+    reviewsData.list = reviewsData.list.filter(r => r.id !== req.params.id);
+    await db.ref('ranzhy_reviews').set(reviewsData);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: "Gagal hapus review" }); }
 });
 
 // ================= API LAINNYA =================
